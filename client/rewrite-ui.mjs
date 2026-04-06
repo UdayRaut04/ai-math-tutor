@@ -1,205 +1,13 @@
-"use client";
+import fs from 'fs';
 
-import React, { useState, useEffect, useRef } from "react";
-import Lottie from "lottie-react";
-import { motion, AnimatePresence } from "framer-motion";
-import { idleAnimation, talkingAnimation, thinkingAnimation } from "./LottieAnimations";
-import { puter } from '@heyputer/puter.js';
-import { Whiteboard } from "./Whiteboard";
+let content = fs.readFileSync('src/app/page.tsx', 'utf8');
 
-type Message = {
-  id: string;
-  sender: "user" | "ai";
-  text: string;
-  attachment?: string;
-};
+const returnIndex = content.indexOf('return (');
+if (returnIndex === -1) throw new Error("Could not find return (");
 
-export default function Home() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "1",
-      sender: "ai",
-      text: "Hello! I am your AI Math Tutor. What math problem would you like to solve today?",
-    },
-  ]);
-  const [inputValue, setInputValue] = useState("");
-  const [board, setBoard] = useState("CBSE");
-  const [grade, setGrade] = useState("5");
-  const [topic, setTopic] = useState("General Math");
-  const [animState, setAnimState] = useState<"idle" | "thinking" | "talking">("idle");
-  const [isRecording, setIsRecording] = useState(false);
-  const [isWhiteboardOpen, setIsWhiteboardOpen] = useState(false);
-  const [attachmentPreview, setAttachmentPreview] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+const topPart = content.substring(0, returnIndex);
 
-  // Web Speech API references
-  const recognitionRef = useRef<any>(null);
-  const synthRef = useRef<SpeechSynthesis | null>(null);
-
-  useEffect(() => {
-    // Scroll to bottom when messages update
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  useEffect(() => {
-    // Initialize Speech Recognition
-    if (typeof window !== "undefined") {
-      const SpeechRecognition =
-        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        recognitionRef.current = new SpeechRecognition();
-        recognitionRef.current.continuous = false;
-        recognitionRef.current.interimResults = false;
-        recognitionRef.current.lang = "en-US";
-
-        recognitionRef.current.onresult = (event: any) => {
-          const transcript = event.results[0][0].transcript;
-          setInputValue(transcript);
-          // Optional: Auto-send after voice finishes recording
-          // handleSend(transcript);
-        };
-
-        recognitionRef.current.onend = () => {
-          setIsRecording(false);
-        };
-
-        recognitionRef.current.onerror = (event: any) => {
-          console.error("Speech recognition error", event.error);
-          setIsRecording(false);
-        };
-      } else {
-        console.warn("Speech recognition is not supported in this browser.");
-      }
-
-      synthRef.current = window.speechSynthesis;
-    }
-  }, []);
-
-  const handleMicClick = () => {
-    if (isRecording) {
-      recognitionRef.current?.stop();
-      setIsRecording(false);
-    } else {
-      recognitionRef.current?.start();
-      setIsRecording(true);
-    }
-  };
-
-  const speakText = (text: string) => {
-    if (!synthRef.current) return;
-    
-    // Stop any ongoing speech
-    synthRef.current.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "en-US";
-    utterance.rate = 0.9;
-    utterance.pitch = 1.1;
-
-    utterance.onstart = () => setAnimState("talking");
-    utterance.onend = () => setAnimState("idle");
-
-    synthRef.current.speak(utterance);
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && file.type.startsWith("image/")) {
-      const reader = new FileReader();
-      reader.onload = (e) => setAttachmentPreview(e.target?.result as string);
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleSend = async (textToSend: string = inputValue) => {
-    if (!textToSend.trim() && !attachmentPreview) return;
-
-    const userMsg: Message = {
-      id: Date.now().toString(),
-      sender: "user",
-      text: textToSend,
-      attachment: attachmentPreview || undefined,
-    };
-
-    setMessages((prev) => [...prev, userMsg]);
-    setInputValue("");
-    setAttachmentPreview(null);
-    setAnimState("thinking");
-    
-    // Cancel any ongoing speech when user sends a new message
-    if (synthRef.current) {
-        synthRef.current.cancel();
-    }
-
-    try {
-      const prompt = `You are a friendly and encouraging AI Math Tutor. The student is in Grade ${grade} and follows the ${board} curriculum. They need help with ${topic}. Answer concisely and step-by-step. The student says: "${textToSend}" ${attachmentPreview ? "[The user has attached an image of a math problem for context]" : ""}`;
-      
-      const response = await puter.ai.chat(prompt);
-      const replyText = (response as any).message?.content as string || "I'm not sure how to respond to that.";
-
-      const aiMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        sender: "ai",
-        text: replyText,
-      };
-
-      setMessages((prev) => [...prev, aiMsg]);
-      speakText(replyText);
-    } catch (error) {
-      console.error("Error fetching AI response:", error);
-      const errorMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        sender: "ai",
-        text: "Sorry, I am having trouble connecting to the server.",
-      };
-      setMessages((prev) => [...prev, errorMsg]);
-      setAnimState("idle");
-    }
-  };
-
-  const downloadChat = () => {
-    const chatContent = messages
-      .map((m) => `${m.sender === "ai" ? "Tutor" : "Student"}: ${m.text}`)
-      .join("\n\n");
-    const blob = new Blob([chatContent], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `AI_Math_Tutor_Session_${new Date().toISOString().split("T")[0]}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const clearChat = () => {
-    if (window.confirm("Are you sure you want to clear the conversation?")) {
-      setMessages([
-        {
-          id: "1",
-          sender: "ai",
-          text: "Hello! I am your AI Math Tutor. What math problem would you like to solve today?",
-        },
-      ]);
-    }
-  };
-
-  const getAnimation = () => {
-    switch (animState) {
-      case "idle":
-        return idleAnimation;
-      case "thinking":
-        return thinkingAnimation;
-      case "talking":
-        return talkingAnimation;
-      default:
-        return idleAnimation;
-    }
-  };
-
-  const selectClassName = "appearance-none bg-white/5 hover:bg-white/10 text-white/90 px-4 py-2 pr-8 text-sm rounded-xl border border-white/10 outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all cursor-pointer bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22%23a1a1aa%22%3E%3Cpath%20d%3D%22M5.293%207.293a1%201%200%20011.414%200L10%2010.586l3.293-3.293a1%201%200%20111.414%201.414l-4%204a1%201%200%2001-1.414%200l-4-4a1%201%200%20010-1.414z%22/%3E%3C/svg%3E')] bg-no-repeat bg-[position:right_0.5rem_center] backdrop-blur-md";
-  const optionClassName = "bg-neutral-800 text-white";
-
-  return (
+const newJSX = `return (
     <div className="flex flex-col h-screen bg-[#050505] text-white font-sans overflow-hidden relative selection:bg-indigo-500/30">
       {/* Background ambient glows */}
       <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] rounded-full bg-indigo-600/10 blur-[150px] pointer-events-none mix-blend-screen"></div>
@@ -225,8 +33,8 @@ export default function Home() {
                <h1 className="text-lg font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 to-cyan-300 leading-tight">AI Tutor</h1>
                <div className="flex items-center gap-2 mt-[-2px]">
                  <span className="relative flex h-1.5 w-1.5">
-                   <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${animState !== 'idle' ? 'bg-emerald-400' : 'bg-indigo-400'}`}></span>
-                   <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${animState !== 'idle' ? 'bg-emerald-500' : 'bg-indigo-500'}`}></span>
+                   <span className={\`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 \${animState !== 'idle' ? 'bg-emerald-400' : 'bg-indigo-400'}\`}></span>
+                   <span className={\`relative inline-flex rounded-full h-1.5 w-1.5 \${animState !== 'idle' ? 'bg-emerald-500' : 'bg-indigo-500'}\`}></span>
                  </span>
                  <span className="text-[10px] font-medium text-white/40 uppercase tracking-widest">{animState}</span>
                </div>
@@ -296,7 +104,7 @@ export default function Home() {
                 initial={{ opacity: 0, y: 15, scale: 0.98 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 key={msg.id}
-                className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}
+                className={\`flex \${msg.sender === "user" ? "justify-end" : "justify-start"}\`}
               >
                 {msg.sender === "ai" && (
                   <div className="w-8 h-8 rounded-[0.8rem] bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center mr-3 mt-auto mb-2 flex-shrink-0">
@@ -304,11 +112,11 @@ export default function Home() {
                   </div>
                 )}
                 <div
-                  className={`max-w-[90%] sm:max-w-[80%] p-4 sm:p-5 shadow-2xl leading-relaxed text-[15px] ${
+                  className={\`max-w-[90%] sm:max-w-[80%] p-4 sm:p-5 shadow-2xl leading-relaxed text-[15px] \${
                     msg.sender === "user"
                       ? "bg-white/10 backdrop-blur-md rounded-[1.5rem] rounded-br-sm text-white border border-white/10"
                       : "bg-gradient-to-b from-white/[0.05] to-transparent backdrop-blur-xl border border-white/5 rounded-[1.5rem] rounded-bl-sm text-gray-200"
-                  }`}
+                  }\`}
                 >
                   {msg.attachment && (
                     <img src={msg.attachment} alt="attachment" className="mb-4 max-h-72 rounded-xl max-w-full object-cover shadow-lg border border-white/10" />
@@ -364,11 +172,11 @@ export default function Home() {
               
               <button
                 onClick={handleMicClick}
-                className={`p-3.5 rounded-full transition-all duration-300 flex-shrink-0 flex items-center justify-center group ${
+                className={\`p-3.5 rounded-full transition-all duration-300 flex-shrink-0 flex items-center justify-center group \${
                   isRecording
                     ? "bg-red-500/20 text-red-400 border border-red-500/30"
                     : "hover:bg-white/5 text-gray-400 border border-transparent"
-                }`}
+                }\`}
               >
                 <span className="text-xl group-hover:scale-110 transition-transform">{isRecording ? "🔴" : "🎤"}</span>
               </button>
@@ -411,3 +219,7 @@ export default function Home() {
     </div>
   );
 }
+`;
+
+fs.writeFileSync('src/app/page.tsx', topPart + newJSX);
+console.log("Rewrote page.tsx!");
