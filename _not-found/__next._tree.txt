@@ -1,2 +1,2 @@
-:HL["/ai-math-tutor/_next/static/chunks/03~dd037olwvf.css","style"]
-0:{"tree":{"name":"","param":null,"prefetchHints":16,"slots":{"children":{"name":"/_not-found","param":null,"prefetchHints":0,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":0,"slots":null}}}}},"staleTime":300,"buildId":"GDsqrVx_-csYrCmGbSl4U"}
+:HL["/ai-math-tutor/_next/static/chunks/04rqytdm_h1v1.css","style"]
+0:{"tree":{"name":"","param":null,"prefetchHints":16,"slots":{"children":{"name":"/_not-found","param":null,"prefetchHints":0,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":0,"slots":null}}}}},"staleTime":300,"buildId":"rW9fQfewxcQKxHX9YobyI"}
